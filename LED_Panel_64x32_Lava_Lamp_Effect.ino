@@ -1,6 +1,9 @@
 /*******************************************************************
     Implements the Perlin noise algorithm to display a kind of lava
-    lamp effect on a 64x32 LED panel
+    lamp effect on a 64x32 LED panel with an ESP8266 as controller.
+    For hardware setup see:
+    https://www.instructables.com/id/RGB-LED-Matrix-With-an-ESP8266/
+    (Credits to Brian Lough for his help.)
 
     Written by Maximilian Laurenz
  *******************************************************************/
@@ -31,10 +34,18 @@ Ticker display_ticker;
 #define P_D 12
 #define P_E 0
 
+// LED matrix size in dots:
+#define MATRIX_WIDTH 64
+#define MATRIX_HEIGHT 32
+#define MATRIX_SIZE MATRIX_WIDTH * MATRIX_HEIGHT
+
 // Choose your board configuration:
-// PxMATRIX display(32, 16, P_LAT, P_OE, P_A, P_B, P_C);
-   PxMATRIX display(64, 32, P_LAT, P_OE, P_A, P_B, P_C, P_D);
-// PxMATRIX display(64, 32, P_LAT, P_OE, P_A, P_B, P_C, P_D, P_E);
+// PxMATRIX display(MATRIX_WIDTH, MATRIX_HEIGHT, P_LAT, P_OE, P_A, P_B, P_C);
+   PxMATRIX display(MATRIX_WIDTH, MATRIX_HEIGHT, P_LAT, P_OE, P_A, P_B, P_C, P_D);
+// PxMATRIX display(MATRIX_WIDTH, MATRIX_HEIGHT, P_LAT, P_OE, P_A, P_B, P_C, P_D, P_E);
+
+// Image buffer for faster drawing to the screen:
+uint8_t buffer[MATRIX_SIZE];
 
 // Perlin noise initializer HASH:
 int p[512] = {151, 160, 137, 91, 90, 15, 131, 13, 201, 95, 96, 53, 194, 233, 7, 225, 140, 36, 103, 30, 69
@@ -76,13 +87,13 @@ double noise(double x, double y, double z) {
 
   return
     lerp(w, lerp(v, lerp(u, grad(p[AA  ], x  , y  , z   ),
-                grad(p[BA  ], x-1, y  , z   )),
+                            grad(p[BA  ], x-1, y  , z   )),
             lerp(u, grad(p[AB  ], x  , y-1, z   ),
-                grad(p[BB  ], x-1, y-1, z   ))),
+                            grad(p[BB  ], x-1, y-1, z   ))),
     lerp(v, lerp(u, grad(p[AA+1], x  , y  , z-1 ),
-                grad(p[BA+1], x-1, y  , z-1 )),
+                            grad(p[BA+1], x-1, y  , z-1 )),
             lerp(u, grad(p[AB+1], x  , y-1, z-1 ),
-                grad(p[BB+1], x-1, y-1, z-1 ))));
+                            grad(p[BB+1], x-1, y-1, z-1 ))));
 }
 // ===
 
@@ -96,25 +107,42 @@ void display_updater() {
 }
 
 void setup() {
-  for (int i = 0; i < 256; i++) p[256+i] = p[i]; // initialize the second half of the array
+  // Initialize the second half of the Perlin HASH array:
+  for (int i = 0; i < 256; i++) p[256+i] = p[i];
+  
+  // Reset image buffer array:
+  for (int i = 0; i < MATRIX_SIZE; i++) buffer[i] = 0;
+  
+  // Initialize display, this is just copied from the PxMatrix examples:
   display.begin(16);
   display.display(0);
   display_ticker.attach(0.002, display_updater);
+  
+  // yield() returns action to system tasks of ESP,
+  // this function must be called regularily or the micro-controller will crash and soft reset:
   yield();
-  int c = 0;
-  uint16_t cc;
+  
+  int c = 0, idx;
+  uint16_t c565;
+  float perlinX, perlinY;
   
   for (float z = 0; z < 2; z = z + 0.02) { // 100 frames
-    // display.clearDisplay(); // doesn't help
+    // display.clearDisplay(); // does not help against flicker, when delay is more reduced
 
-    for (float y = 0; y < 3.2; y = y + 0.1) {
-      for (float x = 0; x < 6.4; x = x + 0.1) {
-        c = mapRange(-1, 1, 0, 128, noise(x, y, z));
+    for (float y = 0; y < MATRIX_HEIGHT; y = y + 1) {
+      for (float x = 0; x < MATRIX_WIDTH; x = x + 1) {
+        perlinX = x / 10;
+        perlinY = y / 10;
+        c = mapRange(-1, 1, 0, 128, noise(perlinX, perlinY, z));
         if (c < 64) c = 0; // erase lower color values
-        cc = display.color565(c, 0, 0);
-        display.drawPixel(x * 10, y * 10, cc);
+        c565 = display.color565(c, 0, 0);
+        idx = x + y * 64;
+        if (buffer[idx] != c) {
+          display.drawPixel(x, y, c565);
+          buffer[idx] = c;
+        }
       }
-      delay(1);
+      //delay(1); // remove this and you get the horribly strobo effect :(
     }
 
     delay(50);
