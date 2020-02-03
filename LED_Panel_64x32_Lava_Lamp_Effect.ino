@@ -141,7 +141,7 @@ void setup() {
           buffer[idx] = c;
         }
       }
-      if ((int)y % 5 == 0) delay(1); // remove this and you get the horribly strobe effect :(
+      if ((int)y % 5 == 0) delay(1); // remove this and you get the horrible strobe effect :(
     }
 
     delay(200);
