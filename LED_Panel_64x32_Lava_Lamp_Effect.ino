@@ -103,7 +103,7 @@ double mapRange(double a1, double a2, double b1, double b2, double s) {
 
 // ISR for display refresh
 void display_updater() {
-  display.display(70);
+  display.display(10);
 }
 
 void setup() {
@@ -115,7 +115,6 @@ void setup() {
   
   // Initialize display, this is just copied from the PxMatrix examples:
   display.begin(16);
-  display.display(0);
   display_ticker.attach(0.002, display_updater);
   
   // yield() returns action to system tasks of ESP,
@@ -142,10 +141,10 @@ void setup() {
           buffer[idx] = c;
         }
       }
-      //delay(1); // remove this and you get the horribly strobo effect :(
+      if ((int)y % 5 == 0) delay(1); // remove this and you get the horribly strobe effect :(
     }
 
-    delay(50);
+    delay(200);
   }
 }
 
